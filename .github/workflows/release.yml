@@ -1,0 +1,51 @@
+name: release
+
+on:
+  push:
+    branches:
+      - preprod
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  COMMITER_USERNAME: ${{ secrets.COMMITER_USERNAME }}
+  COMMITER_EMAIL: ${{ secrets.COMMITER_EMAIL }}
+  COMMITER_GH_TOKEN: ${{ secrets.COMMITER_GH_TOKEN }}
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.SSH_KEY }}
+
+
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ env.COMMITER_GH_TOKEN }}
+          release-type: node
+          target-branch: preprod
+
+      - name: Update Version in app.ts
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          # Extract the new version from release-please output
+          NEW_VERSION=${{ steps.release.outputs.tag_name }}
+          
+          # Remove the 'v' prefix if present
+          NEW_VERSION=${NEW_VERSION#v}
+       
+          sed -i "s/version: \".*\"/version: \"$NEW_VERSION\"/" app.json
+          
+          # Commit and push the changes
+          git config user.name ${{ env.COMMITER_USERNAME }}
+          git config user.email  ${{ env.COMMITER_EMAIL }}
+          git add src/schema/doc.ts
+          git commit -m "chore: update app version to $NEW_VERSION"
+          git push
